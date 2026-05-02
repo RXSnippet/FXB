@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Flappy Bird</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Nunito:wght@400;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --sky: #4ec9f5;
+    --sky2: #87DDFE;
+    --ground: #5d8a3c;
+    --pipe: #5cb85c;
+    --pipe-dark: #3d7a3d;
+    --bird: #f5d73b;
+    --bird-dark: #e0b800;
+    --easy: #3ecf8e;
+    --hard: #f04e4e;
+    --gold: #ffd700;
+    --shadow: rgba(0,0,0,0.25);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    overflow: hidden;
+    background: #000;
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Nunito', sans-serif;
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  #gameWrap {
+    position: relative;
+    width: min(400px, 100vw);
+    height: min(700px, 100svh);
+    overflow: hidden;
+    border-radius: 20px;
+    box-shadow: 0 30px 80px rgba(0,0,0,0.8);
+  }
+
+  canvas { display: block; width: 100%; height: 100%; }
+
+  /* ─── UI OVERLAYS ─── */
+  .overlay {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 18px;
+    transition: opacity .35s, transform .35s;
+  }
+  .overlay.hidden { opacity: 0; pointer-events: none; transform: scale(.96); }
+
+  /* ─── START SCREEN ─── */
+  #startScreen {
+    background: linear-gradient(170deg, #73d5ff 0%, #c6f0ff 100%);
+  }
+  #startScreen h1 {
+    font-family: 'Fredoka One', cursive;
+    font-size: 52px;
+    color: #fff;
+    text-shadow: 0 4px 0 #0088bb, 0 6px 18px rgba(0,0,0,.25);
+    letter-spacing: 1px;
+    line-height: 1;
+  }
+  #startScreen .sub {
+    font-size: 15px; color: #1a6f99; font-weight: 700;
+    background: rgba(255,255,255,0.5); padding: 6px 18px;
+    border-radius: 20px;
+  }
+  .mode-row {
+    display: flex; gap: 14px;
+  }
+  .mode-btn {
+    padding: 14px 28px; border: none; border-radius: 16px;
+    font-family: 'Fredoka One', cursive; font-size: 22px;
+    cursor: pointer; transition: transform .12s, box-shadow .12s;
+    box-shadow: 0 5px 0 rgba(0,0,0,.25);
+    letter-spacing: .5px;
+  }
+  .mode-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 rgba(0,0,0,.25); }
+  .mode-btn.easy { background: var(--easy); color: #fff; }
+  .mode-btn.hard { background: var(--hard); color: #fff; }
+  .mode-btn.selected {
+    outline: 4px solid #fff;
+    outline-offset: 2px;
+    transform: scale(1.07);
+    box-shadow: 0 7px 0 rgba(0,0,0,.25);
+  }
+  #startBtn {
+    padding: 16px 52px; border: none; border-radius: 20px;
+    font-family: 'Fredoka One', cursive; font-size: 26px;
+    background: #fff; color: #1a6f99;
+    cursor: pointer; box-shadow: 0 6px 0 #b0d8ef, 0 10px 30px rgba(0,0,0,.2);
+    transition: transform .12s, box-shadow .12s;
+  }
+  #startBtn:active { transform: translateY(4px); box-shadow: 0 2px 0 #b0d8ef; }
+  .hint { font-size: 13px; color: #1a6f99; font-weight: 700; opacity: .7; }
+
+  /* ─── HUD (in-game) ─── */
+  #hud {
+    position: absolute; top: 0; left: 0; right: 0;
+    padding: 16px 20px 0;
+    display: flex; justify-content: space-between; align-items: flex-start;
+    pointer-events: none;
+  }
+  #hud.hidden { display: none; }
+  .hud-score {
+    font-family: 'Fredoka One', cursive;
+    font-size: 48px; color: #fff;
+    text-shadow: 0 3px 0 rgba(0,0,0,.4), 0 5px 20px rgba(0,0,0,.2);
+    line-height: 1;
+  }
+  .hud-badge {
+    font-family: 'Fredoka One', cursive; font-size: 15px;
+    padding: 5px 14px; border-radius: 20px; color: #fff;
+    text-shadow: none;
+    box-shadow: 0 3px 0 rgba(0,0,0,.25);
+  }
+  .hud-badge.easy { background: var(--easy); }
+  .hud-badge.hard { background: var(--hard); }
+
+  /* ─── GAME OVER ─── */
+  #gameOver {
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+  }
+  .go-card {
+    background: #fff;
+    border-radius: 28px;
+    padding: 32px 36px;
+    display: flex; flex-direction: column; align-items: center; gap: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    width: 300px;
+    animation: popIn .4s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes popIn {
+    from { transform: scale(.6); opacity: 0; }
+    to   { transform: scale(1);  opacity: 1; }
+  }
+  .go-title {
+    font-family: 'Fredoka One', cursive; font-size: 38px;
+    color: #e84343; text-align: center;
+    text-shadow: 0 3px 0 #a00;
+  }
+  .score-row {
+    display: flex; justify-content: space-between; width: 100%; gap: 12px;
+  }
+  .score-box {
+    flex: 1; background: #f4f7fe; border-radius: 16px;
+    padding: 12px 8px; text-align: center;
+  }
+  .score-box label {
+    font-size: 11px; font-weight: 800; color: #aab; text-transform: uppercase;
+    letter-spacing: .8px; display: block; margin-bottom: 4px;
+  }
+  .score-box .val {
+    font-family: 'Fredoka One', cursive; font-size: 36px;
+    color: #2d3550;
+  }
+  .score-box .val.gold { color: var(--gold); }
+  #newBestBadge {
+    background: linear-gradient(135deg, #ffd700, #ff9f00);
+    color: #fff; font-family: 'Fredoka One', cursive;
+    font-size: 14px; padding: 4px 16px; border-radius: 20px;
+    box-shadow: 0 3px 10px rgba(255,160,0,.4);
+    display: none;
+  }
+  #retryBtn {
+    padding: 15px 44px; border: none; border-radius: 18px;
+    font-family: 'Fredoka One', cursive; font-size: 24px;
+    background: linear-gradient(135deg, #4ec9f5, #1a9fd4);
+    color: #fff; cursor: pointer;
+    box-shadow: 0 5px 0 #0e6f99, 0 10px 30px rgba(0,0,0,.2);
+    transition: transform .12s, box-shadow .12s; width: 100%;
+  }
+  #retryBtn:active { transform: translateY(3px); box-shadow: 0 2px 0 #0e6f99; }
+  #menuBtn {
+    padding: 10px 32px; border: none; border-radius: 14px;
+    font-family: 'Fredoka One', cursive; font-size: 18px;
+    background: #eee; color: #777; cursor: pointer;
+    box-shadow: 0 3px 0 #ccc;
+    transition: transform .12s, box-shadow .12s; width: 100%;
+  }
+  #menuBtn:active { transform: translateY(2px); box-shadow: 0 1px 0 #ccc; }
+
+  /* ─── FLOATING SCORE ANIM ─── */
+  .float-score {
+    position: absolute;
+    font-family: 'Fredoka One', cursive;
+    font-size: 28px; color: #fff;
+    text-shadow: 0 2px 8px rgba(0,0,0,.4);
+    pointer-events: none;
+    animation: floatUp .9s ease-out forwards;
+    z-index: 99;
+  }
+  @keyframes floatUp {
+    0%   { opacity: 1; transform: translateY(0) scale(1.3); }
+    100% { opacity: 0; transform: translateY(-70px) scale(.8); }
+  }
+
+  /* ─── COUNTDOWN ─── */
+  #countdown {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+  }
+  #countdown.hidden { display: none; }
+  #countNum {
+    font-family: 'Fredoka One', cursive; font-size: 110px; color: #fff;
+    text-shadow: 0 6px 0 rgba(0,0,0,.3);
+    animation: pulse .5s ease-out;
+  }
+  @keyframes pulse {
+    0%   { transform: scale(1.6); opacity: 0; }
+    60%  { transform: scale(1);   opacity: 1; }
+    100% { transform: scale(.9);  opacity: .8; }
+  }
+
+  /* Score counter roll animation */
+  @keyframes rollIn {
+    from { opacity:0; transform: translateY(20px) scale(.7); }
+    to   { opacity:1; transform: translateY(0) scale(1); }
+  }
+  .val.animate { animation: rollIn .5s cubic-bezier(.34,1.56,.64,1) both; }
+</style>
+</head>
+<body>
+<div id="gameWrap">
+  <canvas id="c"></canvas>
+
+  <!-- HUD -->
+  <div id="hud" class="hidden">
+    <div class="hud-score" id="hudScore">0</div>
+    <div class="hud-badge easy" id="modeBadge">EASY</div>
+  </div>
+
+  <!-- Countdown -->
+  <div id="countdown" class="hidden"><div id="countNum">3</div></div>
+
+  <!-- Start Screen -->
+  <div class="overlay" id="startScreen">
+    <h1>Flappy<br>Bird</h1>
+    <div class="sub">Choose your difficulty</div>
+    <div class="mode-row">
+      <button class="mode-btn easy selected" id="easyBtn">😊 Easy</button>
+      <button class="mode-btn hard" id="hardBtn">💀 Hard</button>
+    </div>
+    <button id="startBtn">▶ Play</button>
+    <div class="hint">Tap / Click / Space to flap</div>
+  </div>
+
+  <!-- Game Over -->
+  <div class="overlay hidden" id="gameOver">
+    <div class="go-card">
+      <div class="go-title">Game Over!</div>
+      <div class="score-row">
+        <div class="score-box">
+          <label>Score</label>
+          <div class="val" id="goScore">0</div>
+        </div>
+        <div class="score-box">
+          <label>Best</label>
+          <div class="val gold" id="goBest">0</div>
+        </div>
+      </div>
+      <div id="newBestBadge">🏆 New Best!</div>
+      <button id="retryBtn">↩ Retry</button>
+      <button id="menuBtn">☰ Menu</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  AUDIO ENGINE (Web Audio API)
+// ═══════════════════════════════════════════
+const AC = new (window.AudioContext || window.webkitAudioContext)();
+
+function resumeAC() { if (AC.state === 'suspended') AC.resume(); }
+
+function playTone(freq, type, dur, vol=0.3, delay=0) {
+  resumeAC();
+  const o = AC.createOscillator();
+  const g = AC.createGain();
+  o.connect(g); g.connect(AC.destination);
+  o.type = type; o.frequency.value = freq;
+  const t = AC.currentTime + delay;
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+  o.start(t); o.stop(t + dur + 0.05);
+}
+
+function sfxFlap()  { playTone(520,'sine',.08,.2); playTone(620,'sine',.06,.1,.05); }
+function sfxScore() { playTone(880,'sine',.05,.25); playTone(1100,'sine',.05,.25,.07); playTone(1320,'sine',.1,.2,.14); }
+function sfxDie()   {
+  playTone(440,'sawtooth',.06,.25);
+  playTone(300,'sawtooth',.1,.3,.07);
+  playTone(150,'sawtooth',.2,.35,.17);
+}
+function sfxHit()   { playTone(200,'square',.08,.4); playTone(80,'square',.12,.4,.05); }
+function sfxNew()   {
+  [523,659,784,1047].forEach((f,i) => playTone(f,'sine',.12,.2,i*.1));
+}
+
+// ═══════════════════════════════════════════
+//  CANVAS SETUP
+// ═══════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const wrap   = document.getElementById('gameWrap');
+
+let W, H;
+function resize() {
+  const r = wrap.getBoundingClientRect();
+  W = canvas.width  = r.width;
+  H = canvas.height = r.height;
+}
+resize();
+window.addEventListener('resize', () => { resize(); });
+
+// ═══════════════════════════════════════════
+//  GAME STATE
+// ═══════════════════════════════════════════
+const MODES = {
+  easy: { gravity:.32, jumpVel:-7.2, pipeSpeed:2.4, pipeGap:160, pipeInt:1600 },
+  hard: { gravity:.52, jumpVel:-8.8, pipeSpeed:3.8, pipeGap:120, pipeInt:1200 }
+};
+let mode = 'easy';
+let cfg  = MODES.easy;
+
+let state = 'start'; // 'start' | 'countdown' | 'playing' | 'dead'
+let score = 0;
+let bestScore = { easy: 0, hard: 0 };
+try { let s = JSON.parse(localStorage.getItem('fbBest')||'{}'); bestScore.easy=s.easy||0; bestScore.hard=s.hard||0; } catch(e){}
+
+// ── Bird ──
+const bird = { x:0, y:0, vy:0, r:16, angle:0, frame:0, fTimer:0 };
+function resetBird() {
+  bird.x = W * .25;
+  bird.y = H * .45;
+  bird.vy = 0;
+  bird.angle = 0;
+}
+
+// ── Pipes ──
+let pipes = [];
+let lastPipe = 0;
+
+// ── Background layers ──
+let bgClouds = [];
+function initClouds() {
+  bgClouds = [];
+  for (let i=0;i<5;i++) bgClouds.push({ x: Math.random()*W, y: 60+Math.random()*H*.3, w:40+Math.random()*80, speed:.3+Math.random()*.4 });
+}
+
+// ── Ground ──
+const GROUND = 60;
+let groundX = 0;
+
+// ═══════════════════════════════════════════
+//  DRAW HELPERS
+// ═══════════════════════════════════════════
+function drawSky() {
+  const g = ctx.createLinearGradient(0,0,0,H-GROUND);
+  g.addColorStop(0,'#4ec9f5');
+  g.addColorStop(1,'#c6f0ff');
+  ctx.fillStyle = g;
+  ctx.fillRect(0,0,W,H-GROUND);
+}
+
+function drawClouds(dt) {
+  bgClouds.forEach(c => {
+    if (state==='playing') c.x -= c.speed * dt * .06;
+    if (c.x + c.w < 0) c.x = W + c.w;
+    ctx.save();
+    ctx.globalAlpha = .75;
+    ctx.fillStyle = '#fff';
+    const rr = c.w/2;
+    ctx.beginPath();
+    ctx.ellipse(c.x, c.y, rr, rr*.55, 0, 0, Math.PI*2);
+    ctx.ellipse(c.x+rr*.5, c.y-rr*.3, rr*.7, rr*.5, 0, 0, Math.PI*2);
+    ctx.ellipse(c.x-rr*.4, c.y-rr*.2, rr*.6, rr*.4, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  });
+}
+
+function drawGround(dt) {
+  if (state==='playing') groundX -= cfg.pipeSpeed * dt * .06;
+  if (groundX < -40) groundX += 40;
+  // grass strip
+  ctx.fillStyle = '#5d8a3c';
+  ctx.fillRect(0, H-GROUND, W, GROUND);
+  ctx.fillStyle = '#7ab648';
+  ctx.fillRect(0, H-GROUND, W, 12);
+  // dirt
+  ctx.fillStyle = '#c8a06b';
+  ctx.fillRect(0, H-GROUND+12, W, GROUND-12);
+  // dashes
+  ctx.fillStyle = '#b38a58';
+  for (let x=groundX; x<W; x+=40) ctx.fillRect(x, H-GROUND+16, 28, 4);
+}
+
+function drawPipe(x, topH) {
+  const gap = cfg.pipeGap;
+  const bH  = H - GROUND - topH - gap;
+  const pw  = 52;
+  const capH = 20, capW = pw+10;
+
+  // top pipe body
+  const gt = ctx.createLinearGradient(x,0,x+pw,0);
+  gt.addColorStop(0,'#4caf4c');
+  gt.addColorStop(.4,'#81d481');
+  gt.addColorStop(1,'#3d7a3d');
+  ctx.fillStyle = gt;
+  ctx.fillRect(x, 0, pw, topH);
+
+  // top pipe cap
+  const gc = ctx.createLinearGradient(x-5,0,x+capW,0);
+  gc.addColorStop(0,'#4caf4c');
+  gc.addColorStop(.4,'#81d481');
+  gc.addColorStop(1,'#3d7a3d');
+  ctx.fillStyle = gc;
+  roundRect(ctx, x-5, topH-capH, capW, capH, 5);
+  ctx.fill();
+
+  // bottom pipe body
+  ctx.fillStyle = gt;
+  ctx.fillRect(x, topH+gap, pw, bH);
+  // bottom cap
+  ctx.fillStyle = gc;
+  roundRect(ctx, x-5, topH+gap, capW, capH, 5);
+  ctx.fill();
+
+  // shine line
+  ctx.save();
+  ctx.globalAlpha = .2;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x+6, 0, 8, topH-capH);
+  ctx.fillRect(x+6, topH+gap+capH, 8, bH);
+  ctx.globalAlpha = 1;
+  ctx.restore();
+}
+
+function roundRect(c, x, y, w, h, r) {
+  c.beginPath();
+  c.moveTo(x+r, y);
+  c.lineTo(x+w-r, y); c.quadraticCurveTo(x+w,y,x+w,y+r);
+  c.lineTo(x+w,y+h-r); c.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  c.lineTo(x+r,y+h); c.quadraticCurveTo(x,y+h,x,y+h-r);
+  c.lineTo(x,y+r); c.quadraticCurveTo(x,y,x+r,y);
+  c.closePath();
+}
+
+// Beak colors for wing flap frames
+function drawBird(bx, by, angle, frame) {
+  ctx.save();
+  ctx.translate(bx, by);
+  ctx.rotate(angle);
+
+  const r = bird.r;
+  // body
+  const bg = ctx.createRadialGradient(-r*.2,-r*.2,r*.1,0,0,r*1.2);
+  bg.addColorStop(0,'#ffe45a');
+  bg.addColorStop(1,'#f5c200');
+  ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.fillStyle=bg; ctx.fill();
+
+  // wing
+  const wingY = frame===1 ? r*.5 : frame===2 ? -r*.3 : 0;
+  ctx.fillStyle = '#e0a800';
+  ctx.beginPath();
+  ctx.ellipse(-r*.3, wingY, r*.55, r*.3, frame===1 ? .4 : frame===2 ? -.4 : 0, 0, Math.PI*2);
+  ctx.fill();
+
+  // eye white
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(r*.35,-r*.2,r*.35,0,Math.PI*2); ctx.fill();
+  // pupil
+  ctx.fillStyle = '#222';
+  ctx.beginPath(); ctx.arc(r*.45,-r*.22,r*.18,0,Math.PI*2); ctx.fill();
+  // eye shine
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(r*.52,-r*.28,r*.08,0,Math.PI*2); ctx.fill();
+
+  // beak
+  ctx.fillStyle = '#ff8c00';
+  ctx.beginPath();
+  ctx.moveTo(r*.6,-r*.08); ctx.lineTo(r*1.2,0); ctx.lineTo(r*.6,r*.2);
+  ctx.closePath(); ctx.fill();
+
+  // cheek
+  ctx.fillStyle = 'rgba(255,130,100,.4)';
+  ctx.beginPath(); ctx.ellipse(r*.25,r*.25,r*.3,r*.2,0,0,Math.PI*2); ctx.fill();
+
+  ctx.restore();
+}
+
+// ═══════════════════════════════════════════
+//  GAME LOGIC
+// ═══════════════════════════════════════════
+function spawnPipe(now) {
+  const minH = 50, maxH = H - GROUND - cfg.pipeGap - 50;
+  const topH = minH + Math.random() * (maxH - minH);
+  pipes.push({ x: W+10, topH, scored: false });
+  lastPipe = now;
+}
+
+function jump() {
+  if (state !== 'playing') return;
+  bird.vy = cfg.jumpVel;
+  bird.fTimer = 0; bird.frame = 1;
+  sfxFlap();
+}
+
+function checkCollision(p) {
+  const { x, topH } = p;
+  const gap = cfg.pipeGap;
+  const pw = 52, capW = pw+10;
+  // pipe x range (with cap)
+  const px1 = x-5, px2 = x+capW;
+  // bird circle vs pipe rects
+  const bx = bird.x, by = bird.y, br = bird.r*.85;
+  if (bx+br < px1 || bx-br > px2) return false;
+  if (by-br < topH || by+br > topH+gap) return true;
+  return false;
+}
+
+let lastTime = 0;
+function gameLoop(ts) {
+  const dt = Math.min(ts - lastTime, 50);
+  lastTime = ts;
+
+  ctx.clearRect(0,0,W,H);
+  drawSky();
+  drawClouds(dt);
+
+  // pipes
+  pipes.forEach(p => {
+    if (state === 'playing') p.x -= cfg.pipeSpeed * dt * .06;
+    drawPipe(p.x, p.topH);
+  });
+
+  drawGround(dt);
+
+  if (state === 'playing') {
+    // physics
+    bird.vy += cfg.gravity * dt * .06;
+    bird.y  += bird.vy   * dt * .06;
+    bird.angle = Math.min(Math.PI/3, Math.max(-Math.PI/6, bird.vy * .045));
+
+    // wing animation
+    bird.fTimer += dt;
+    if (bird.fTimer > 120) { bird.fTimer=0; bird.frame=(bird.frame+1)%3; }
+
+    // score pipes
+    pipes.forEach(p => {
+      if (!p.scored && p.x + 52 < bird.x) {
+        p.scored = true;
+        score++;
+        document.getElementById('hudScore').textContent = score;
+        sfxScore();
+        spawnFloatScore();
+      }
+    });
+
+    // spawn pipes
+    if (ts - lastPipe > cfg.pipeInt) spawnPipe(ts);
+
+    // cull old pipes
+    pipes = pipes.filter(p => p.x > -80);
+
+    // collision
+    const hitPipe = pipes.some(checkCollision);
+    const hitGround = bird.y + bird.r > H - GROUND;
+    const hitCeil   = bird.y - bird.r < 0;
+    if (hitPipe || hitGround || hitCeil) {
+      if (hitPipe || hitCeil) sfxHit();
+      setTimeout(() => sfxDie(), 80);
+      triggerDeath();
+    }
+  }
+
+  drawBird(bird.x, bird.y, bird.angle, bird.frame);
+
+  // idle bob on start
+  if (state === 'start') {
+    bird.y = H*.45 + Math.sin(ts*.003)*8;
+    bird.frame = Math.floor(ts/200)%3;
+  }
+
+  requestAnimationFrame(gameLoop);
+}
+
+function triggerDeath() {
+  state = 'dead';
+  document.getElementById('hud').classList.add('hidden');
+
+  const isNew = score > bestScore[mode];
+  if (isNew) {
+    bestScore[mode] = score;
+    try { localStorage.setItem('fbBest', JSON.stringify(bestScore)); } catch(e){}
+    sfxNew();
+  }
+
+  // Show game over with animated score count
+  setTimeout(() => {
+    const goEl   = document.getElementById('gameOver');
+    const sEl    = document.getElementById('goScore');
+    const bEl    = document.getElementById('goBest');
+    const nbEl   = document.getElementById('newBestBadge');
+    goEl.classList.remove('hidden');
+
+    // Animate score roll
+    animateCount(sEl, 0, score, 800);
+    animateCount(bEl, 0, bestScore[mode], 900);
+    if (isNew) { nbEl.style.display='block'; } else { nbEl.style.display='none'; }
+  }, 400);
+}
+
+function animateCount(el, from, to, dur) {
+  el.classList.remove('animate');
+  void el.offsetWidth;
+  el.classList.add('animate');
+  const start = performance.now();
+  function step(t) {
+    const p = Math.min((t-start)/dur, 1);
+    const ease = 1-Math.pow(1-p,3);
+    el.textContent = Math.round(from + (to-from)*ease);
+    if (p<1) requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+function spawnFloatScore() {
+  const el = document.createElement('div');
+  el.className = 'float-score';
+  el.textContent = '+1';
+  el.style.left = (bird.x - 10) + 'px';
+  el.style.top  = (bird.y - 30) + 'px';
+  wrap.appendChild(el);
+  setTimeout(() => el.remove(), 950);
+}
+
+// ═══════════════════════════════════════════
+//  COUNTDOWN & START
+// ═══════════════════════════════════════════
+function startCountdown() {
+  state = 'countdown';
+  document.getElementById('startScreen').classList.add('hidden');
+  document.getElementById('gameOver').classList.add('hidden');
+  document.getElementById('countdown').classList.remove('hidden');
+  resetBird();
+  pipes = [];
+  score = 0;
+  document.getElementById('hudScore').textContent = '0';
+  cfg = MODES[mode];
+  lastPipe = -9999;
+  let n = 3;
+  const num = document.getElementById('countNum');
+  num.textContent = n;
+
+  const iv = setInterval(() => {
+    n--;
+    if (n > 0) {
+      num.textContent = n;
+      num.style.animation = 'none'; void num.offsetWidth; num.style.animation='pulse .5s ease-out';
+    } else {
+      clearInterval(iv);
+      document.getElementById('countdown').classList.add('hidden');
+      // Update badge
+      const badge = document.getElementById('modeBadge');
+      badge.textContent = mode.toUpperCase();
+      badge.className = 'hud-badge ' + mode;
+      document.getElementById('hud').classList.remove('hidden');
+      state = 'playing';
+      lastPipe = performance.now();
+      spawnPipe(lastPipe);
+    }
+  }, 700);
+}
+
+// ═══════════════════════════════════════════
+//  CONTROLS
+// ═══════════════════════════════════════════
+document.getElementById('easyBtn').onclick = () => {
+  mode = 'easy';
+  document.getElementById('easyBtn').classList.add('selected');
+  document.getElementById('hardBtn').classList.remove('selected');
+};
+document.getElementById('hardBtn').onclick = () => {
+  mode = 'hard';
+  document.getElementById('hardBtn').classList.add('selected');
+  document.getElementById('easyBtn').classList.remove('selected');
+};
+document.getElementById('startBtn').onclick = () => { resumeAC(); startCountdown(); };
+document.getElementById('retryBtn').onclick = () => { document.getElementById('gameOver').classList.add('hidden'); startCountdown(); };
+document.getElementById('menuBtn').onclick  = () => {
+  state = 'start';
+  document.getElementById('gameOver').classList.add('hidden');
+  document.getElementById('hud').classList.add('hidden');
+  document.getElementById('startScreen').classList.remove('hidden');
+  resetBird();
+  pipes = [];
+};
+
+// Tap / click to flap
+canvas.addEventListener('pointerdown', e => { e.preventDefault(); resumeAC(); jump(); });
+document.addEventListener('keydown', e => { if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); resumeAC(); jump(); }});
+
+// ═══════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════
+resetBird();
+initClouds();
+requestAnimationFrame(t => { lastTime = t; gameLoop(t); });
+</script>
+</body>
+</html>
